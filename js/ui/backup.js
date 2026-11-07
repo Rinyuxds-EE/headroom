@@ -33,7 +33,8 @@ export async function exportBackup(ctx, { strict = false } = {}) {
   }
   if (canShareFile) {
     try {
-      await navigator.share({ files: [file], title: name });
+      // 只分享檔案，不要加 title / text：iPhone「儲存到檔案」會把它們另外存成一個叫「文字」的文字檔
+      await navigator.share({ files: [file] });
       markDone();
       toast('已匯出備份');
       return 'shared';
