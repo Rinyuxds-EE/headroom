@@ -1,0 +1,6 @@
+# 不公開的檔案（GitHub Pages 的儲存庫是公開的）
+# 規格書和專案說明：有範例金額、支出名稱
+SPEC.md
+CLAUDE.md
+# 測試頁：有範例金額
+tests/

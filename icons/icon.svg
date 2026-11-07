@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Headroom App 圖示的原始檔；PNG（180、192、512）由這個檔案轉出 -->
+  <!-- 背景填滿整個方塊（iPhone 會自己裁成圓角；Android 的 maskable 也需要滿版） -->
+  <rect width="512" height="512" fill="#0d1117"/>
+  <g transform="rotate(-90 256 256)" fill="none" stroke-width="60">
+    <!-- 灰色：已經預留或花掉的部分 -->
+    <circle cx="256" cy="256" r="140" stroke="#30363d"/>
+    <!-- 綠色：還剩多少可以花（約 30%） -->
+    <circle cx="256" cy="256" r="140" stroke="#3fb950" stroke-linecap="round"
+      stroke-dasharray="250 630" stroke-dashoffset="0"/>
+  </g>
+</svg>
