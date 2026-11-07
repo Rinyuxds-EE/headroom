@@ -245,7 +245,7 @@ function pageHtml(data, month) {
           <input type="file" accept=".json,application/json" data-field="importFile" hidden>
         </label>
       </div>
-      <p class="hint">匯出時選「儲存到檔案」，再選 iCloud 雲碟。匯入會覆蓋目前的資料。</p>
+      <p class="hint">匯出時選「儲存到檔案」→ iCloud 雲碟，每次存到同一個資料夾。檔名固定是 headroom-backup.json，出現「已有同名項目」時選「取代」，iCloud 上就只會留最新的一份。匯入會覆蓋目前的資料。</p>
     </section>
 
     <section class="card danger-zone">

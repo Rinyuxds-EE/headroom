@@ -176,10 +176,13 @@ export function preserveCorrupted(raw, store, now = new Date()) {
 
 export const BEFORE_IMPORT_KEY = 'headroom:beforeImport';
 
-// 備份檔名：headroom-backup-YYYYMMDD.json（用當地日期）
-export function backupFileName(now = new Date()) {
-  const p = (n) => String(n).padStart(2, '0');
-  return `headroom-backup-${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}.json`;
+// 備份檔名：固定是 headroom-backup.json（SPEC 3.9）
+// 每次都同名，存到 iCloud 同一個資料夾時 iPhone 會問要不要「取代」，這樣只會保留最新的一份
+// 備份時間記在檔案裡的 settings.lastBackupAt，匯入時會顯示
+export const BACKUP_FILE_NAME = 'headroom-backup.json';
+
+export function backupFileName() {
+  return BACKUP_FILE_NAME;
 }
 
 // 產生備份檔內容；檔案裡的 lastBackupAt 就是這次備份的時間（還原後也知道是哪一次的備份）
