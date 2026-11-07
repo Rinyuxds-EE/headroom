@@ -56,7 +56,7 @@ function draw(el, ctx) {
   const donut = donutSegments(result);
   const categoryIndex = (id) => data.categories.findIndex((c) => c.id === id);
   const colors = donut ? segmentColors(donut, categoryIndex) : null;
-  if (donut && view.selectedKey && view.selectedKey !== 'fixed'
+  if (donut && view.selectedKey && view.selectedKey !== 'fixed' && view.selectedKey !== 'subscription'
     && !donut.segments.some((s) => s.key === view.selectedKey)) view.selectedKey = null;
 
   el.innerHTML = `
@@ -91,7 +91,8 @@ function draw(el, ctx) {
 // 提醒區：年繳提醒、26 號後的餘額提醒、太久沒備份（有才顯示）
 function remindersHtml(data, month, today) {
   const config = resolveMonthConfig(data, month);
-  const items = yearlyDueThisMonth(config.fixedExpenses, month).map((f) => `
+  const due = [...yearlyDueThisMonth(config.fixedExpenses, month), ...yearlyDueThisMonth(config.subscriptions, month)];
+  const items = due.map((f) => `
     <div class="reminder">本月需繳 ${escapeHtml(f.name)} <span class="num">${formatAmount(f.amount)}</span> 元（已按月攤提）</div>`);
 
   if (balanceReminderDue(data, today)) {
@@ -139,10 +140,10 @@ function livingHtml(result) {
 }
 
 // 圖例：每一塊的名稱、百分比、金額；超支時最後多一行紅字
-// 固定支出放在「固定支出」小標題下面，小標題顯示合計和百分比
+// 固定支出、會員訂閱各自放在小標題下面，小標題顯示合計和百分比
 function legendHtml(donut, colors) {
   const sel = view.selectedKey;
-  const isDim = (s) => sel && sel !== s.key && !(sel === 'fixed' && s.group === 'fixed');
+  const isDim = (s) => sel && sel !== s.key && !(s.group && s.group === sel);
   const row = (s, extraClass = '') => `
     <button class="legend-row${extraClass}${isDim(s) ? ' dim' : ''}" data-key="${escapeHtml(s.key)}">
       <span class="swatch" style="background:${colors.get(s.key)}"></span>
@@ -152,15 +153,21 @@ function legendHtml(donut, colors) {
     </button>`;
 
   const fixedSegs = donut.segments.filter((s) => s.group === 'fixed');
-  const others = donut.segments.filter((s) => s.group !== 'fixed');
+  const subSegs = donut.segments.filter((s) => s.group === 'subscription');
+  const others = donut.segments.filter((s) => !s.group);
   const fixedHeader = {
     key: 'fixed', label: '固定支出', amount: donut.fixedGroup.amount, percent: donut.fixedGroup.percent,
+  };
+  const subHeader = {
+    key: 'subscription', label: '會員訂閱', amount: donut.subscriptionGroup.amount, percent: donut.subscriptionGroup.percent,
   };
 
   return `
     <section class="card legend">
       ${row(fixedHeader, ' legend-group')}
       ${fixedSegs.map((s) => row(s, ' legend-child')).join('')}
+      ${subSegs.length > 0 ? row(subHeader, ' legend-group') : ''}
+      ${subSegs.map((s) => row(s, ' legend-child')).join('')}
       ${others.map((s) => row(s)).join('')}
       ${donut.overspend > 0 ? `<div class="legend-overspend negative">超支 <span class="num">${formatAmount(donut.overspend)}</span> 元</div>` : ''}
     </section>`;

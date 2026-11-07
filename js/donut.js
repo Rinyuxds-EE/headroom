@@ -17,15 +17,22 @@ const COLORS = {
 };
 const FIXED_DARK = [0x57, 0x60, 0x6a];  // #57606a
 const FIXED_LIGHT = [0xc9, 0xd1, 0xd9]; // #c9d1d9
+// 會員訂閱：紫色由淺到深（接在最淺的灰色後面，最深的一塊接分期／上月超支／生活費，都驗證過分得開）
+const SUB_LIGHT = [0xa9, 0x9b, 0xe0];   // #a99be0
+const SUB_DARK = [0x5b, 0x4a, 0x9b];    // #5b4a9b
 // 自訂類別依它在類別清單裡的位置固定配色（顏色跟著類別走，不會因為其他類別有沒有花費而改變）
 const CATEGORY_COLORS = ['#c98500', '#9085e9', '#199e70'];
 
-// 固定支出第 i 項（共 n 項）的灰色：第一項最深、最後一項最淺
-function fixedShade(i, n) {
+// 一組裡第 i 項（共 n 項）的顏色：從 from 漸變到 to
+function shade(from, to, i, n) {
   const t = n <= 1 ? 0.5 : i / (n - 1);
-  const rgb = FIXED_DARK.map((d, k) => Math.round(d + (FIXED_LIGHT[k] - d) * t));
+  const rgb = from.map((d, k) => Math.round(d + (to[k] - d) * t));
   return `#${rgb.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
+// 固定支出：第一項最深、最後一項最淺
+const fixedShade = (i, n) => shade(FIXED_DARK, FIXED_LIGHT, i, n);
+// 會員訂閱：第一項最淺、最後一項最深
+const subShade = (i, n) => shade(SUB_LIGHT, SUB_DARK, i, n);
 
 // 算出每一塊的顏色，回傳 Map（key → 顏色）
 // categoryIndex(id) 回傳類別在清單裡的位置
@@ -33,6 +40,8 @@ export function segmentColors(donut, categoryIndex) {
   const colors = new Map();
   const fixedSegs = donut.segments.filter((s) => s.group === 'fixed');
   fixedSegs.forEach((s, i) => colors.set(s.key, fixedShade(i, fixedSegs.length)));
+  const subSegs = donut.segments.filter((s) => s.group === 'subscription');
+  subSegs.forEach((s, i) => colors.set(s.key, subShade(i, subSegs.length)));
   for (const s of donut.segments) {
     if (colors.has(s.key)) continue;
     if (s.key.startsWith('category:')) {
@@ -43,8 +52,9 @@ export function segmentColors(donut, categoryIndex) {
       colors.set(s.key, COLORS[s.key]);
     }
   }
-  // 圖例小標題「固定支出」用中間的灰色
+  // 圖例小標題用該組中間的顏色
   colors.set('fixed', fixedShade(0, 1));
+  colors.set('subscription', subShade(0, 1));
   return colors;
 }
 
@@ -56,10 +66,10 @@ const GAP = 2; // 相鄰兩塊之間的間隙（SVG 單位）
 // 產生圓環圖的 SVG 字串
 // donut：donutSegments 的結果；center：{ label, value, className }
 // selectedKey：目前點選的區塊（其他區塊會變淡），沒有就是 null
-// selectedKey 是 'fixed' 時，強調整組固定支出
+// selectedKey 是 'fixed' 或 'subscription' 時，強調整組
 export function donutSvg(donut, center, colors, selectedKey = null) {
   const circumference = 2 * Math.PI * RADIUS;
-  const isSelected = (seg) => seg.key === selectedKey || (selectedKey === 'fixed' && seg.group === 'fixed');
+  const isSelected = (seg) => seg.key === selectedKey || (seg.group && seg.group === selectedKey);
   const visible = donut.segments.filter((s) => s.amount > 0);
   const useGap = visible.length > 1;
 

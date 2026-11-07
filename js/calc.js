@@ -111,12 +111,16 @@ export function installmentsTotal(installments, month) {
 // ───────────── 月份設定（快照或目前設定） ─────────────
 
 // 取得某個月計算要用的設定：有快照就用快照，沒有就用目前設定（SPEC 4.2）
+// 會員訂閱是後來才加的功能：舊資料、舊快照沒有 subscriptions，就當作沒有訂閱
 export function resolveMonthConfig(data, month) {
   const monthData = (data.months && data.months[month]) || {};
   const snapshot = monthData.snapshot || null;
-  const source = snapshot
-    ? { defaultSalary: snapshot.defaultSalary, dailyLiving: snapshot.dailyLiving, fixedExpenses: snapshot.fixedExpenses }
-    : { defaultSalary: data.settings.defaultSalary, dailyLiving: data.settings.dailyLiving, fixedExpenses: data.fixedExpenses };
+  const source = snapshot || {
+    defaultSalary: data.settings.defaultSalary,
+    dailyLiving: data.settings.dailyLiving,
+    fixedExpenses: data.fixedExpenses,
+    subscriptions: data.subscriptions,
+  };
 
   // 該月手動設定的月薪優先；null 就用預設月薪
   const salary = monthData.salary != null ? monthData.salary : source.defaultSalary;
@@ -125,6 +129,7 @@ export function resolveMonthConfig(data, month) {
     salary,
     dailyLiving: source.dailyLiving,
     fixedExpenses: source.fixedExpenses || [],
+    subscriptions: source.subscriptions || [],
     extraIncome: monthData.extraIncome || [],
   };
 }
@@ -280,22 +285,29 @@ export function backupReminderDue(lastBackupAt, nowMs, hasEntries) {
 
 // ───────────── 月份計算 ─────────────
 
+// 固定支出或會員訂閱的各項（依設定的順序；年繳用每月攤提的金額），給圓環圖拆塊用
+// 快照裡的項目沒有 id，用順序當代號
+function monthlyItems(items) {
+  return [...items]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((item, i) => ({ key: item.id || `#${i}`, name: item.name, amount: fixedItemMonthly(item) }));
+}
+
 // 計算某個月，「上月超支」由參數直接給定（SPEC 第 4 節公式）
 export function calcMonthWithCarry(data, month, prevOverspend) {
   const config = resolveMonthConfig(data, month);
 
   const extraIncome = config.extraIncome.reduce((sum, item) => sum + item.amount, 0);
   const totalIncome = config.salary + extraIncome;
+  // 固定支出和會員訂閱：算法一樣（每月全額；年繳每月攤提），都在月初先扣
   const fixed = fixedTotal(config.fixedExpenses);
-  // 固定支出的各項（依設定的順序；年繳用每月攤提的金額），給圓環圖拆塊用
-  // 快照裡的項目沒有 id，用順序當代號
-  const fixedItems = [...config.fixedExpenses]
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .map((item, i) => ({ key: item.id || `#${i}`, name: item.name, amount: fixedItemMonthly(item) }));
+  const fixedItems = monthlyItems(config.fixedExpenses);
+  const subscriptions = fixedTotal(config.subscriptions);
+  const subscriptionItems = monthlyItems(config.subscriptions);
   const livingBudget = config.dailyLiving * daysInMonth(month);
   const installments = installmentsTotal(data.installments || [], month);
 
-  const flexBudget = totalIncome - fixed - livingBudget - installments - prevOverspend;
+  const flexBudget = totalIncome - fixed - subscriptions - livingBudget - installments - prevOverspend;
 
   const spent = sumEntries(data.entries || [], data.categories || [], month);
   const livingOverspend = Math.max(0, spent.living - livingBudget);
@@ -310,6 +322,8 @@ export function calcMonthWithCarry(data, month, prevOverspend) {
     totalIncome,
     fixed,
     fixedItems,
+    subscriptions,
+    subscriptionItems,
     livingBudget,
     installments,
     prevOverspend,
@@ -357,10 +371,10 @@ export function todayAllowance(flexRemaining, today) {
 // ───────────── 圓環圖 ─────────────
 
 // 依月份計算結果產生圓環圖的分塊（SPEC 4.3）
-// 回傳 { denominator, overspend, fixedGroup, segments }
+// 回傳 { denominator, overspend, fixedGroup, subscriptionGroup, segments }
 //   overspend > 0 時畫面要顯示超支提示
-//   fixedGroup：固定支出的合計 { amount, percent }，給圖例的小標題用
-//   segments：固定支出的每一項是獨立一塊（group: 'fixed'，金額 0 的不列）
+//   fixedGroup / subscriptionGroup：固定支出、會員訂閱的合計 { amount, percent }，給圖例的小標題用
+//   segments：固定支出、會員訂閱的每一項是獨立一塊（group: 'fixed' / 'subscription'，金額 0 的不列）
 // 總收入 ≤ 0 時回傳 null，代表不畫圖
 export function donutSegments(result) {
   if (result.totalIncome <= 0) return null;
@@ -369,6 +383,11 @@ export function donutSegments(result) {
   for (const item of result.fixedItems) {
     if (item.amount > 0) {
       segments.push({ key: `fixed:${item.key}`, label: item.name, amount: item.amount, group: 'fixed' });
+    }
+  }
+  for (const item of result.subscriptionItems) {
+    if (item.amount > 0) {
+      segments.push({ key: `sub:${item.key}`, label: item.name, amount: item.amount, group: 'subscription' });
     }
   }
   segments.push({ key: 'installments', label: '分期', amount: result.installments });
@@ -396,6 +415,7 @@ export function donutSegments(result) {
     seg.percent = toPercent(seg.amount);
   }
   const fixedGroup = { amount: result.fixed, percent: toPercent(result.fixed) };
+  const subscriptionGroup = { amount: result.subscriptions, percent: toPercent(result.subscriptions) };
 
-  return { denominator, overspend, fixedGroup, segments };
+  return { denominator, overspend, fixedGroup, subscriptionGroup, segments };
 }

@@ -3,7 +3,7 @@
 // ⚠️ 每次修改任何檔案、要重新上傳之前，都要把下面的 CACHE_VERSION 數字加 1。
 //    手機只會在這個檔案有變的時候才下載新版本；沒改版本號，手機會一直用舊的檔案。
 
-const CACHE_VERSION = 'headroom-v1';
+const CACHE_VERSION = 'headroom-v2';
 
 // 要存在手機裡的檔案（測試頁不需要）。新增檔案時記得加進來
 const FILES = [

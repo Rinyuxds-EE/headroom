@@ -29,8 +29,9 @@ export function newId() {
 // ───────────── 預設資料 ─────────────
 
 // 第一次開啟 App 時的資料（SPEC 第 5 節）
+// 固定支出 4 個預設項目（金額 0）；會員訂閱、自訂類別都沒有預設，由使用者自己新增
 export function createDefaultData(currentMonth) {
-  const fixedNames = ['孝親', '學貸', '女友約會', '網路訂閱', '固定投資'];
+  const fixedNames = ['孝親', '學貸', '約會', '投資'];
   return {
     version: DATA_VERSION,
     settings: {
@@ -42,11 +43,26 @@ export function createDefaultData(currentMonth) {
     fixedExpenses: fixedNames.map((name, i) => ({
       id: newId(), name, amount: 0, cycle: 'monthly', dueMonth: null, order: i,
     })),
+    subscriptions: [],
     installments: [],
-    categories: [{ id: newId(), name: '媽媽餐費', archived: false }],
+    categories: [],
     months: {},
     entries: [],
   };
+}
+
+// 補上舊資料缺少的欄位（會直接修改 data 並回傳它）
+// 會員訂閱是後來才加的，之前的資料和備份檔沒有 subscriptions，補成空的
+export function normalizeData(data) {
+  if (!Array.isArray(data.subscriptions)) data.subscriptions = [];
+  return data;
+}
+
+// 檢查固定支出或會員訂閱的一個項目；正確回傳 null
+function itemProblem(f, label) {
+  if (!isObject(f) || typeof f.name !== 'string' || !isInt(f.amount)) return `${label}項目格式錯誤`;
+  if (f.cycle !== 'monthly' && f.cycle !== 'yearly') return `${label}週期格式錯誤`;
+  return null;
 }
 
 // ───────────── 格式檢查 ─────────────
@@ -68,8 +84,17 @@ export function validateData(data) {
 
   if (!Array.isArray(data.fixedExpenses)) return 'fixedExpenses 不是陣列';
   for (const f of data.fixedExpenses) {
-    if (!isObject(f) || typeof f.name !== 'string' || !isInt(f.amount)) return '固定支出項目格式錯誤';
-    if (f.cycle !== 'monthly' && f.cycle !== 'yearly') return '固定支出週期格式錯誤';
+    const problem = itemProblem(f, '固定支出');
+    if (problem) return problem;
+  }
+
+  // 會員訂閱可以沒有（舊資料），有的話要是陣列
+  if (data.subscriptions !== undefined) {
+    if (!Array.isArray(data.subscriptions)) return 'subscriptions 不是陣列';
+    for (const f of data.subscriptions) {
+      const problem = itemProblem(f, '會員訂閱');
+      if (problem) return problem;
+    }
   }
 
   if (!Array.isArray(data.installments)) return 'installments 不是陣列';
@@ -124,7 +149,7 @@ export function loadData(currentMonth, store) {
   const problem = validateData(parsed);
   if (problem) return { status: 'corrupt', raw, error: problem };
 
-  return { status: 'ok', data: parsed };
+  return { status: 'ok', data: normalizeData(parsed) };
 }
 
 // 儲存資料；成功回傳 true，失敗（例如空間不足）回傳 false
@@ -174,7 +199,7 @@ export function parseBackup(text) {
   }
   const problem = validateData(parsed);
   if (problem) return { ok: false, error: `備份檔格式不正確：${problem}` };
-  return { ok: true, data: parsed };
+  return { ok: true, data: normalizeData(parsed) };
 }
 
 // 匯入前先把目前的資料另存一份（只保留最近一次），萬一匯錯檔還救得回來；成功回傳 true
@@ -227,12 +252,14 @@ export function freezeSnapshots(data, currentMonth) {
     const monthData = ensureMonth(data, m);
     if (monthData.snapshot) continue;
 
+    const copyItems = (items) => [...(items || [])]
+      .sort((a, b) => a.order - b.order)
+      .map((f) => ({ name: f.name, amount: f.amount, cycle: f.cycle, dueMonth: f.dueMonth }));
     monthData.snapshot = {
       defaultSalary: data.settings.defaultSalary,
       dailyLiving: data.settings.dailyLiving,
-      fixedExpenses: [...data.fixedExpenses]
-        .sort((a, b) => a.order - b.order)
-        .map((f) => ({ name: f.name, amount: f.amount, cycle: f.cycle, dueMonth: f.dueMonth })),
+      fixedExpenses: copyItems(data.fixedExpenses),
+      subscriptions: copyItems(data.subscriptions),
     };
     count += 1;
   }

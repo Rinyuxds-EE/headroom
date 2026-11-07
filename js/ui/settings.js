@@ -54,9 +54,45 @@ function textInput(field, id, value, extra = '') {
     data-field="${field}" data-id="${escapeHtml(id)}" value="${escapeHtml(value)}" ${extra}>`;
 }
 
+// 固定支出、會員訂閱共用的項目清單（名稱、金額、每月／每年、繳費月份、排序、刪除）
+// list：'fixedExpenses' 或 'subscriptions'
+function itemListHtml(list, items) {
+  const sorted = [...items].sort((a, b) => a.order - b.order);
+  const attrs = (id) => `data-list="${list}" data-id="${escapeHtml(id)}"`;
+  return sorted.map((item, i) => `
+    <div class="item">
+      <div class="row">
+        <input class="input" type="text" autocomplete="off" data-field="itemName" ${attrs(item.id)}
+          value="${escapeHtml(item.name)}" aria-label="名稱">
+        <input class="input num" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+          data-field="itemAmount" ${attrs(item.id)} value="${item.amount}" aria-label="金額">
+      </div>
+      <div class="row">
+        <select class="input select" data-field="itemCycle" ${attrs(item.id)} aria-label="週期">
+          <option value="monthly" ${item.cycle === 'monthly' ? 'selected' : ''}>每月</option>
+          <option value="yearly" ${item.cycle === 'yearly' ? 'selected' : ''}>每年</option>
+        </select>
+        ${item.cycle === 'yearly' ? `
+          <select class="input select" data-field="itemDue" ${attrs(item.id)} aria-label="繳費月份">
+            ${Array.from({ length: 12 }, (_, k) => k + 1).map((n) =>
+              `<option value="${n}" ${item.dueMonth === n ? 'selected' : ''}>${n} 月繳</option>`).join('')}
+          </select>` : ''}
+      </div>
+      ${item.cycle === 'yearly' ? `<p class="hint" data-derived="yearly:${escapeHtml(item.id)}"></p>` : ''}
+      <div class="row row-end">
+        <button class="btn btn-icon" data-action="moveItem" data-dir="-1" ${attrs(item.id)}
+          aria-label="上移" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button class="btn btn-icon" data-action="moveItem" data-dir="1" ${attrs(item.id)}
+          aria-label="下移" ${i === sorted.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="btn btn-icon btn-danger" data-action="deleteItem" ${attrs(item.id)} aria-label="刪除">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+const LIST_LABEL = { fixedExpenses: '固定支出', subscriptions: '會員訂閱' };
+
 function pageHtml(data, month) {
   const monthData = data.months[month] || { salary: null, extraIncome: [] };
-  const sortedFixed = [...data.fixedExpenses].sort((a, b) => a.order - b.order);
   const visibleInst = data.installments.filter((inst) => !isInstallmentFinished(inst, month));
   const activeCats = data.categories.filter((c) => !c.archived);
   const archivedCats = data.categories.filter((c) => c.archived);
@@ -102,34 +138,18 @@ function pageHtml(data, month) {
 
     <section class="card">
       <h2 class="section-title">固定支出</h2>
-      ${sortedFixed.map((item, i) => `
-        <div class="item">
-          <div class="row">
-            ${textInput('fixedName', item.id, item.name, 'aria-label="名稱"')}
-            ${amountInput('fixedAmount', item.id, item.amount, 'aria-label="金額"')}
-          </div>
-          <div class="row">
-            <select class="input select" data-field="fixedCycle" data-id="${escapeHtml(item.id)}" aria-label="週期">
-              <option value="monthly" ${item.cycle === 'monthly' ? 'selected' : ''}>每月</option>
-              <option value="yearly" ${item.cycle === 'yearly' ? 'selected' : ''}>每年</option>
-            </select>
-            ${item.cycle === 'yearly' ? `
-              <select class="input select" data-field="fixedDue" data-id="${escapeHtml(item.id)}" aria-label="繳費月份">
-                ${Array.from({ length: 12 }, (_, k) => k + 1).map((n) =>
-                  `<option value="${n}" ${item.dueMonth === n ? 'selected' : ''}>${n} 月繳</option>`).join('')}
-              </select>` : ''}
-          </div>
-          ${item.cycle === 'yearly' ? `<p class="hint" data-derived="yearly:${escapeHtml(item.id)}"></p>` : ''}
-          <div class="row row-end">
-            <button class="btn btn-icon" data-action="moveFixed" data-dir="-1" data-id="${escapeHtml(item.id)}"
-              aria-label="上移" ${i === 0 ? 'disabled' : ''}>↑</button>
-            <button class="btn btn-icon" data-action="moveFixed" data-dir="1" data-id="${escapeHtml(item.id)}"
-              aria-label="下移" ${i === sortedFixed.length - 1 ? 'disabled' : ''}>↓</button>
-            <button class="btn btn-icon btn-danger" data-action="deleteFixed" data-id="${escapeHtml(item.id)}" aria-label="刪除">✕</button>
-          </div>
-        </div>`).join('')}
-      <button class="btn btn-ghost" data-action="addFixed">＋ 新增固定支出</button>
-      <div class="total">每月固定支出合計 <span class="num" data-derived="fixedTotal"></span></div>
+      ${itemListHtml('fixedExpenses', data.fixedExpenses)}
+      <button class="btn btn-ghost" data-action="addItem" data-list="fixedExpenses">＋ 新增固定支出</button>
+      <div class="total">每月固定支出合計 <span class="num" data-derived="total:fixedExpenses"></span></div>
+    </section>
+
+    <section class="card">
+      <h2 class="section-title">會員訂閱</h2>
+      <p class="hint">跟固定支出一樣在月初先扣；在首頁圓環圖裡是獨立的一組。</p>
+      ${data.subscriptions.length === 0 ? '<p class="hint">還沒有會員訂閱。</p>' : ''}
+      ${itemListHtml('subscriptions', data.subscriptions)}
+      <button class="btn btn-ghost" data-action="addItem" data-list="subscriptions">＋ 新增會員訂閱</button>
+      <div class="total">每月會員訂閱合計 <span class="num" data-derived="total:subscriptions"></span></div>
     </section>
 
     <section class="card">
@@ -244,12 +264,13 @@ function derivedValues(data, month) {
 
   values.monthSalaryPlaceholder = `預設 ${formatAmount(data.settings.defaultSalary)}`;
   values.monthIncome = formatAmount(config.salary + extra);
-  values.fixedTotal = formatAmount(fixedTotal(data.fixedExpenses));
+  values['total:fixedExpenses'] = formatAmount(fixedTotal(data.fixedExpenses));
+  values['total:subscriptions'] = formatAmount(fixedTotal(data.subscriptions));
 
   const days = daysInMonth(month);
   values.livingBudget = `本月預算 = ${formatAmount(data.settings.dailyLiving)} × ${days} 天 = ${formatAmount(data.settings.dailyLiving * days)}`;
 
-  for (const f of data.fixedExpenses) {
+  for (const f of [...data.fixedExpenses, ...data.subscriptions]) {
     if (f.cycle === 'yearly') {
       values[`yearly:${f.id}`] = `每月攤提 ${formatAmount(yearlyMonthly(f.amount))}（全額 ${formatAmount(f.amount)}）`;
     }
@@ -388,21 +409,23 @@ function handleChange(view, input) {
       break;
     }
 
-    case 'fixedName':
-    case 'fixedAmount':
-    case 'fixedCycle':
-    case 'fixedDue': {
-      const item = data.fixedExpenses.find((x) => x.id === id);
+    case 'itemName':
+    case 'itemAmount':
+    case 'itemCycle':
+    case 'itemDue': {
+      const list = input.dataset.list;
+      if (!LIST_LABEL[list]) return;
+      const item = data[list].find((x) => x.id === id);
       if (!item) return;
-      if (field === 'fixedName') {
+      if (field === 'itemName') {
         const name = readName(input, item.name);
         if (name === null) return;
         ctx.commit(() => { item.name = name; });
-      } else if (field === 'fixedAmount') {
+      } else if (field === 'itemAmount') {
         const n = readAmount(input, item.amount);
         if (n === null) return;
         ctx.commit(() => { item.amount = n; });
-      } else if (field === 'fixedCycle') {
+      } else if (field === 'itemCycle') {
         const cycle = input.value === 'yearly' ? 'yearly' : 'monthly';
         ctx.commit(() => {
           item.cycle = cycle;
@@ -538,19 +561,26 @@ function handleAction(view, btn) {
       break;
     }
 
-    case 'addFixed': {
+    case 'addItem': {
+      const list = btn.dataset.list;
+      if (!LIST_LABEL[list]) return;
       const newItemId = newId();
-      const maxOrder = data.fixedExpenses.reduce((max, f) => Math.max(max, f.order), -1);
+      const maxOrder = data[list].reduce((max, f) => Math.max(max, f.order), -1);
       ctx.commit((d) => {
-        d.fixedExpenses.push({ id: newItemId, name: '新項目', amount: 0, cycle: 'monthly', dueMonth: null, order: maxOrder + 1 });
+        d[list].push({
+          id: newItemId, name: list === 'subscriptions' ? '新訂閱' : '新項目',
+          amount: 0, cycle: 'monthly', dueMonth: null, order: maxOrder + 1,
+        });
       });
       draw(view);
-      focusField(view, 'fixedName', newItemId);
+      focusField(view, 'itemName', newItemId);
       return;
     }
 
-    case 'moveFixed': {
-      const sorted = [...data.fixedExpenses].sort((a, b) => a.order - b.order);
+    case 'moveItem': {
+      const list = btn.dataset.list;
+      if (!LIST_LABEL[list]) return;
+      const sorted = [...data[list]].sort((a, b) => a.order - b.order);
       const index = sorted.findIndex((x) => x.id === id);
       const target = index + Number(btn.dataset.dir);
       if (index < 0 || target < 0 || target >= sorted.length) return;
@@ -560,10 +590,12 @@ function handleAction(view, btn) {
       break;
     }
 
-    case 'deleteFixed': {
-      const item = data.fixedExpenses.find((x) => x.id === id);
-      if (!item || !confirm(`刪除固定支出「${item.name}」？\n已經結束的月份不受影響。`)) return;
-      ctx.commit((d) => { d.fixedExpenses = d.fixedExpenses.filter((x) => x.id !== id); });
+    case 'deleteItem': {
+      const list = btn.dataset.list;
+      if (!LIST_LABEL[list]) return;
+      const item = data[list].find((x) => x.id === id);
+      if (!item || !confirm(`刪除${LIST_LABEL[list]}「${item.name}」？\n已經結束的月份不受影響。`)) return;
+      ctx.commit((d) => { d[list] = d[list].filter((x) => x.id !== id); });
       break;
     }
 
